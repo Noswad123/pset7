@@ -1,16 +1,15 @@
 import os
 
 from cs50 import SQL
-from flask import Flask, flash, redirect, render_template, request, session
+from flask import Flask, flash, redirect, render_template, request, session, url_for
 from flask_session import Session
 from tempfile import mkdtemp
 from werkzeug.exceptions import default_exceptions
 from werkzeug.security import check_password_hash, generate_password_hash
 from helpers import apology, login_required, lookup, usd
+from passlib.apps import custom_app_context as pwd_context
 
-# Ensure environment variable is set
-#if not os.environ.get("API_KEY"):
- #   raise RuntimeError("API_KEY not set")
+#Y59B50K5WEHY4FD3
 
 # Configure application
 app = Flask(__name__)
@@ -38,26 +37,100 @@ Session(app)
 # Configure CS50 Library to use SQLite database
 db = SQL("sqlite:///finance.db")
 
-
+"""index page"""
 @app.route("/")
 @login_required
 def index():
-    """Show portfolio of stocks"""
-    return apology("TODO")
+     # get symbols of stocks bought by user.
+    stock_symbols = db.execute("SELECT symbol FROM stocks WHERE user_id=:user_id GROUP BY symbol;", user_id=session['user_id'])
+    print(f"you have {len(stock_symbols)} stocks")
+    grand_total = 0
 
+    if stock_symbols != []:
+        stocks = []
+        current_cash = db.execute("SELECT cash FROM users WHERE id = :user_id;", user_id=session['user_id'])
 
+        for symbol in stock_symbols:
+            symbol_data = lookup(symbol['symbol'])
+            stock_shares = db.execute("SELECT SUM(quantity) FROM stocks WHERE user_id=:user_id AND symbol = :symbol;", \
+            user_id=session['user_id'], symbol=symbol_data['symbol'])
+            print(f"symbol: {symbol_data['symbol']} and shares: {stock_shares}")
+            if stock_shares[0]['SUM(quantity)'] <= 0:
+                continue
+            else:
+                stock_info = {}
+
+                #stock_info['name'] = symbol_data['name']
+                stock_info['symbol'] = symbol_data['symbol']
+                stock_info['price'] = symbol_data['price']
+                stock_info['shares'] = stock_shares[0]['SUM(quantity)']
+                stock_info['total'] = stock_info['shares'] * stock_info['price']
+
+                stocks.append(stock_info)
+
+        for i in range(len(stocks)):
+            grand_total += stocks[i]['total']
+        grand_total += current_cash[0]['cash']
+
+        for i in range(len(stocks)):
+            stocks[i]['price'] = usd(stocks[i]['price'])
+            stocks[i]['total'] = usd(stocks[i]['total'])
+
+        print("did it break here?")
+        return render_template("index.html", stocks=stocks, current_cash=usd(current_cash[0]['cash']), grand_total=usd(grand_total))
+
+    else:
+        current_cash = db.execute("SELECT cash FROM users WHERE id=:user_id;", user_id=session['user_id'])
+        return render_template("index.html", current_cash=usd(current_cash[0]['cash']), grand_total = usd(current_cash[0]['cash']))
+
+"""Buy Stocks"""
 @app.route("/buy", methods=["GET", "POST"])
 @login_required
 def buy():
-    """Buy shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+        # check if valid input
+        try:
+            symbol = lookup(request.form.get("symbol"))
+            shares = int(request.form.get("shares"))
+        except:
+            return apology("enter some input")
 
+        # if symbol is empty return apology
+        if not symbol:
+            return apology("enter a valid symbol")
 
+        # if shares is empty
+        if not shares or shares <= 0:
+            return apology("enter the number of shares")
+
+        # if can't afford to buy then error
+        # get cash from db
+        userTotal = db.execute("SELECT cash FROM users WHERE id=:user_id;", user_id=session["user_id"])
+        userTotal = int(userTotal[0]['cash'])
+        if (shares * symbol['price']) > userTotal:
+            return apology("can't afford")
+        else:
+            db.execute("INSERT INTO stocks (symbol, quantity, price, user_id) VALUES (:symbol, :quantity, :price, :user_id);", \
+            symbol=symbol['symbol'], quantity=shares, price=symbol['price'], user_id=session["user_id"])
+            # update cash (define old_balance)
+            db.execute("UPDATE users SET cash=cash-:total_price WHERE id=:user_id;", total_price=shares*symbol['price'], \
+            user_id=session["user_id"])
+            print("error going from buy to index")
+            return redirect(url_for("index"))
+
+    else:
+        return render_template("buy.html")
+
+"""Show history of stocks"""
 @app.route("/history")
 @login_required
 def history():
-    """Show history of transactions"""
-    return apology("TODO")
+    stocks = db.execute("SELECT symbol, quantity, price, date_time FROM stocks WHERE user_id=:user_id", user_id=session['user_id'])
+
+    for stock in stocks:
+        stock['price'] = usd(stock['price'])
+
+    return render_template("history.html", stocks=stocks)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -83,7 +156,7 @@ def login():
                           username=request.form.get("username"))
 
         # Ensure username exists and password is correct
-        if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("password")):
+        if len(rows) != 1 or not pwd_context.verify( request.form.get("password"),rows[0]["hash"]):
             return apology("invalid username and/or password", 403)
 
         # Remember which user has logged in
@@ -108,29 +181,98 @@ def logout():
     return redirect("/")
 
 
-
+"""Get stock quote."""
 @app.route("/quote", methods=["GET", "POST"])
 @login_required
 def quote():
-    """Get stock quote."""
-    return apology("TODO")
+    if request.method == "POST":
+        quote = lookup(request.form.get("symbol"))
+        if not quote:
+            return apology("stock not found")
+        else:
+            quote['price'] = usd(quote['price'])
+            return render_template("quote.html", quote=quote)
+    else:
+        return render_template("quote.html")
 
-
+"""Register user"""
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    """Register user"""
+
     if request.method == 'POST':
-        print("What will happen when register button is clicked?")
-    if request.method == "GET":
+
+        if not request.form.get("username"):
+            return apology("must provide username", 403)
+        elif not request.form.get("password"):
+            return apology("must provide password", 403)
+        elif not request.form.get("verify"):
+            return apology("must provide password", 403)
+
+        if request.form.get("password") != request.form.get("verify"):
+            return apology("passwords must match")
+
+        password = request.form.get("password")
+        hash = pwd_context.hash(password)
+
+        result = db.execute("INSERT INTO users (username, hash) VALUES (:username, :hash)", \
+        username=request.form.get("username"), hash=hash)
+        if not result:
+            return apology("Use another username", 403)
+
+        user_id = db.execute("SELECT id FROM users WHERE username IS :username",\
+        username=request.form.get("username"))
+        session['user_id'] = user_id[0]['id']
+        return redirect(url_for("index"))
+        #return render_template(login.html)
+
+    else:
         print("Register page: get")
-    return render_template("register.html")
+        return render_template("register.html")
 
 
 @app.route("/sell", methods=["GET", "POST"])
 @login_required
 def sell():
-    """Sell shares of stock"""
-    return apology("TODO")
+    if request.method == "POST":
+        # check if valid input
+        try:
+            symbol = lookup(request.form.get("symbol"))
+            shares = int(request.form.get("shares"))
+        except:
+            return apology("enter some input")
+
+        # if symbol is empty return apology
+        if not symbol:
+            return apology("enter a valid symbol")
+
+        # if shares is empty
+        if not shares or shares <= 0:
+            return apology("enter the quantity of shares")
+
+        # is the stock in the portfolio?
+        stocks_held = db.execute("SELECT SUM(quantity) FROM stocks WHERE user_id=:user_id AND symbol=:symbol;", \
+        user_id=session['user_id'], symbol=symbol['symbol'])
+        if not stocks_held[0]['SUM(quantity)'] :
+            return apology("You don't own this stock")
+
+        # is shares less or = to the stocks held?
+        if shares > stocks_held[0]['SUM(quantity)']:
+            return apology("You don't have that many stocks")
+
+        # enter a new transaction in stocks
+            # ensure a sale is a negative number
+        db.execute("INSERT INTO stocks (symbol, quantity, price, user_id) VALUES (:symbol, :quantity, :price, :user_id);", \
+        symbol=symbol['symbol'], quantity=-shares, price=symbol['price'], user_id=session["user_id"])
+
+        # update cash
+        db.execute("UPDATE users SET cash = cash + :total_price WHERE id = :user_id;", total_price=shares*symbol['price'], \
+        user_id=session["user_id"])
+        print("error happens here")
+        return redirect(url_for("index"))
+
+    else:
+
+        return render_template("sell.html")
 
 
 def errorhandler(e):
