@@ -17,7 +17,7 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js"></script>
         <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js"></script>
 
-        <title>C$50 Finance: {% block title %}{% endblock %}</title>
+        <title>C$50 Finance: </title>
 
     </head>
 
@@ -47,7 +47,7 @@
                 {% endif %}
             </div>
         </nav>
-
+        <h1>{% block title %}{% endblock %}</h1>
         {% if get_flashed_messages() %}
             <header>
                 <div class="alert alert-primary border text-center" role="alert">
@@ -59,7 +59,7 @@
         <main class="container p-5">
             {% block main %}{% endblock %}
         </main>
-        
+
     </body>
 
 </html>

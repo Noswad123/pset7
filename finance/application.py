@@ -6,12 +6,11 @@ from flask_session import Session
 from tempfile import mkdtemp
 from werkzeug.exceptions import default_exceptions
 from werkzeug.security import check_password_hash, generate_password_hash
-
 from helpers import apology, login_required, lookup, usd
 
 # Ensure environment variable is set
-if not os.environ.get("API_KEY"):
-    raise RuntimeError("API_KEY not set")
+#if not os.environ.get("API_KEY"):
+ #   raise RuntimeError("API_KEY not set")
 
 # Configure application
 app = Flask(__name__)
@@ -109,6 +108,7 @@ def logout():
     return redirect("/")
 
 
+
 @app.route("/quote", methods=["GET", "POST"])
 @login_required
 def quote():
@@ -119,7 +119,11 @@ def quote():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     """Register user"""
-    return apology("TODO")
+    if request.method == 'POST':
+        print("What will happen when register button is clicked?")
+    if request.method == "GET":
+        print("Register page: get")
+    return render_template("register.html")
 
 
 @app.route("/sell", methods=["GET", "POST"])
