@@ -1,6 +1,7 @@
 import csv
 import os
 import urllib.request
+import json
 
 from flask import redirect, render_template, request, session
 from functools import wraps
@@ -54,6 +55,10 @@ def lookup(symbol):
         url = f"https://www.alphavantage.co/query?apikey=Y59B50K5WEHY4FD3&datatype=csv&function=TIME_SERIES_INTRADAY&interval=1min&symbol={symbol}"
         webpage = urllib.request.urlopen(url)
 
+        """jsonUrl = f"https://www.alphavantage.co/query?apikey=Y59B50K5WEHY4FD3&datatype=json&function=TIME_SERIES_INTRADAY&interval=1min&symbol={symbol}"
+        response = urllib.request.urlopen(jsonUrl)
+        data = json.loads(response.read())
+        print(f"{data}")"""
         # Parse CSV
         datareader = csv.reader(webpage.read().decode("utf-8").splitlines())
 
@@ -64,11 +69,13 @@ def lookup(symbol):
         row = next(datareader)
 
         # Ensure stock exists
-        try:
+        """try:
             price = float(row[4])
+            print(f"float(row[3])")
         except:
-            return None
-
+            print("error when getting price of stock")
+            return None"""
+        price = float(row[4])
         # Return stock's name (as a str), price (as a float), and (uppercased) symbol (as a str)
         return {
             "price": price,
@@ -76,7 +83,11 @@ def lookup(symbol):
         }
 
     except:
-        return None
+        print("error when reading csv")
+        return {
+            "price": 0,
+            "symbol": symbol.upper()
+        }
 
 
 def usd(value):

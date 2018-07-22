@@ -43,18 +43,16 @@ db = SQL("sqlite:///finance.db")
 def index():
      # get symbols of stocks bought by user.
     stock_symbols = db.execute("SELECT symbol FROM stocks WHERE user_id=:user_id GROUP BY symbol;", user_id=session['user_id'])
-    print(f"you have {len(stock_symbols)} stocks")
     grand_total = 0
 
     if stock_symbols != []:
         stocks = []
-        current_cash = db.execute("SELECT cash FROM users WHERE id = :user_id;", user_id=session['user_id'])
+        cash = db.execute("SELECT cash FROM users WHERE id = :user_id;", user_id=session['user_id'])
 
         for symbol in stock_symbols:
             symbol_data = lookup(symbol['symbol'])
             stock_shares = db.execute("SELECT SUM(quantity) FROM stocks WHERE user_id=:user_id AND symbol = :symbol;", \
             user_id=session['user_id'], symbol=symbol_data['symbol'])
-            print(f"symbol: {symbol_data['symbol']} and shares: {stock_shares}")
             if stock_shares[0]['SUM(quantity)'] <= 0:
                 continue
             else:
@@ -70,18 +68,17 @@ def index():
 
         for i in range(len(stocks)):
             grand_total += stocks[i]['total']
-        grand_total += current_cash[0]['cash']
+        grand_total += cash[0]['cash']
 
         for i in range(len(stocks)):
             stocks[i]['price'] = usd(stocks[i]['price'])
             stocks[i]['total'] = usd(stocks[i]['total'])
 
-        print("did it break here?")
-        return render_template("index.html", stocks=stocks, current_cash=usd(current_cash[0]['cash']), grand_total=usd(grand_total))
+        return render_template("index.html", stocks=stocks, cash=usd(cash[0]['cash']), grand_total=usd(grand_total))
 
     else:
-        current_cash = db.execute("SELECT cash FROM users WHERE id=:user_id;", user_id=session['user_id'])
-        return render_template("index.html", current_cash=usd(current_cash[0]['cash']), grand_total = usd(current_cash[0]['cash']))
+        cash = db.execute("SELECT cash FROM users WHERE id=:user_id;", user_id=session['user_id'])
+        return render_template("index.html", cash=usd(cash[0]['cash']), grand_total = usd(cash[0]['cash']))
 
 """Buy Stocks"""
 @app.route("/buy", methods=["GET", "POST"])
@@ -115,7 +112,7 @@ def buy():
             # update cash (define old_balance)
             db.execute("UPDATE users SET cash=cash-:total_price WHERE id=:user_id;", total_price=shares*symbol['price'], \
             user_id=session["user_id"])
-            print("error going from buy to index")
+
             return redirect(url_for("index"))
 
     else:
@@ -226,7 +223,7 @@ def register():
         #return render_template(login.html)
 
     else:
-        print("Register page: get")
+
         return render_template("register.html")
 
 
@@ -267,7 +264,7 @@ def sell():
         # update cash
         db.execute("UPDATE users SET cash = cash + :total_price WHERE id = :user_id;", total_price=shares*symbol['price'], \
         user_id=session["user_id"])
-        print("error happens here")
+
         return redirect(url_for("index"))
 
     else:
